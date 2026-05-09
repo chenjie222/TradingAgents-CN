@@ -10,6 +10,7 @@ from .base import DataSourceAdapter
 from .tushare_adapter import TushareAdapter
 from .akshare_adapter import AKShareAdapter
 from .baostock_adapter import BaoStockAdapter
+from .qmt_adapter import QMTAdapter  # QMT 本地数据源适配器
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class DataSourceManager:
         self.adapters: List[DataSourceAdapter] = [
             TushareAdapter(),
             AKShareAdapter(),
+            QMTAdapter(),  # QMT 本地数据源（优先级最高，但默认关闭）
             BaoStockAdapter(),
         ]
 

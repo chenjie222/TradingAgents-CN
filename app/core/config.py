@@ -299,6 +299,34 @@ class Settings(BaseSettings):
     BAOSTOCK_INIT_BATCH_SIZE: int = Field(default=50, ge=10, le=500, description="初始化批处理大小")
     BAOSTOCK_INIT_AUTO_START: bool = Field(default=False, description="应用启动时自动检查并初始化数据")
 
+    # ==================== QMT统一数据同步配置 ====================
+
+    # QMT基础配置
+    QMT_ENABLED: bool = Field(default=False, description="启用QMT数据源（默认关闭，需要本地QMT终端运行）")
+    QMT_XTQUANT_PATH: str = Field(default="", description="xtquant包路径（QMT的site-packages目录）")
+    QMT_USERDATA_PATH: str = Field(default="", description="QMT userdata_mini路径（交易功能需要）")
+    QMT_ACCOUNT_ID: str = Field(default="", description="QMT交易账号（交易功能需要）")
+
+    # QMT统一数据同步总开关
+    QMT_UNIFIED_ENABLED: bool = Field(default=False, description="启用QMT统一数据同步")
+
+    # QMT数据同步任务配置
+    QMT_BASIC_INFO_SYNC_ENABLED: bool = Field(default=True, description="启用基础信息同步")
+    QMT_BASIC_INFO_SYNC_CRON: str = Field(default="30 1 * * *", description="基础信息同步CRON表达式")  # 凌晨1:30
+    QMT_QUOTES_SYNC_ENABLED: bool = Field(default=True, description="启用行情同步")
+    QMT_QUOTES_SYNC_CRON: str = Field(default="*/3 9-15 * * 1-5", description="行情同步CRON表达式")  # 交易时间每3分钟
+    QMT_HISTORICAL_SYNC_ENABLED: bool = Field(default=True, description="启用历史数据同步")
+    QMT_HISTORICAL_SYNC_CRON: str = Field(default="0 15 * * 1-5", description="历史数据同步CRON表达式")  # 收盘后15:00
+    QMT_FINANCIAL_SYNC_ENABLED: bool = Field(default=True, description="启用财务数据同步")
+    QMT_FINANCIAL_SYNC_CRON: str = Field(default="0 2 * * 0", description="财务数据同步CRON表达式")  # 周日凌晨2点
+    QMT_STATUS_CHECK_ENABLED: bool = Field(default=True, description="启用状态检查")
+    QMT_STATUS_CHECK_CRON: str = Field(default="15 * * * *", description="状态检查CRON表达式")  # 每小时15分
+
+    # QMT数据初始化配置
+    QMT_INIT_HISTORICAL_DAYS: int = Field(default=365, ge=1, le=3650, description="初始化历史数据天数")
+    QMT_INIT_BATCH_SIZE: int = Field(default=50, ge=10, le=500, description="初始化批处理大小")
+    QMT_INIT_AUTO_START: bool = Field(default=False, description="应用启动时自动检查并初始化数据")
+
     # 数据目录配置
     TRADINGAGENTS_DATA_DIR: str = Field(default="./data")
 

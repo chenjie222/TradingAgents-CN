@@ -27,6 +27,15 @@ except ImportError:
     BaostockProvider = None
     BAOSTOCK_AVAILABLE = False
 
+# 导入 QMT 提供器（本地数据源）
+try:
+    from .qmt import QMTProvider, get_qmt_provider
+    QMT_AVAILABLE = True
+except ImportError:
+    QMTProvider = None
+    get_qmt_provider = None
+    QMT_AVAILABLE = False
+
 # 导入基本面快照工具
 try:
     from .fundamentals_snapshot import get_fundamentals_snapshot
@@ -42,6 +51,9 @@ __all__ = [
     'TUSHARE_AVAILABLE',
     'BaostockProvider',
     'BAOSTOCK_AVAILABLE',
+    'QMTProvider',
+    'QMT_AVAILABLE',
+    'get_qmt_provider',
     'get_fundamentals_snapshot',
     'FUNDAMENTALS_SNAPSHOT_AVAILABLE',
 ]

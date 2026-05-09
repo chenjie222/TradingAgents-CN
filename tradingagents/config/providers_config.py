@@ -72,6 +72,17 @@ class DataSourceConfig:
             "cache_ttl": self._get_int_env("FINNHUB_CACHE_TTL", 300),
         }
         
+        # QMT配置（本地数据源，默认关闭）
+        self._configs["qmt"] = {
+            "enabled": self._get_bool_env("QMT_ENABLED", False),
+            "xtquant_path": os.getenv("QMT_XTQUANT_PATH", ""),
+            "userdata_path": os.getenv("QMT_USERDATA_PATH", ""),
+            "account_id": os.getenv("QMT_ACCOUNT_ID", ""),
+            "timeout": self._get_int_env("QMT_TIMEOUT", 30),
+            "cache_enabled": self._get_bool_env("QMT_CACHE_ENABLED", True),
+            "cache_ttl": self._get_int_env("QMT_CACHE_TTL", 60),  # 本地数据TTL短
+        }
+
         # 通达信配置 - 已移除
         # TDX 数据源已不再支持
         # self._configs["tdx"] = {
