@@ -327,6 +327,12 @@ class Settings(BaseSettings):
     QMT_INIT_BATCH_SIZE: int = Field(default=50, ge=10, le=500, description="初始化批处理大小")
     QMT_INIT_AUTO_START: bool = Field(default=False, description="应用启动时自动检查并初始化数据")
 
+    # ==================== QMT HTTP Server 客户端配置 ====================
+    # 用于远程连接 QMT HTTP Server，实现跨平台部署
+    QMT_SERVER_URL: str = Field(default="", description="QMT HTTP Server URL（如 http://192.168.1.100:8080）")
+    QMT_SERVER_TIMEOUT: int = Field(default=30, ge=5, le=300, description="QMT HTTP Server 请求超时（秒）")
+    QMT_SERVER_ENABLED: bool = Field(default=False, description="启用 QMT HTTP Client 模式（替代本地 xtquant）")
+
     # 数据目录配置
     TRADINGAGENTS_DATA_DIR: str = Field(default="./data")
 

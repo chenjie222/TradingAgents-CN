@@ -1,49 +1,45 @@
-"""
-QMT data source adapter
+"""QMT HTTP Client Adapter
 
-QMT 是本地量化交易终端，通过 xtquant Python 库提供数据。
+QMT 数据源 HTTP 客户端适配器，连接远程 QMT HTTP Server。
 特点：
-- 需要本地 QMT 终端运行（Windows only）
-- 提供高质量实时行情（直连交易所）
-- 提供五档盘口数据（独有）
-- 不提供 PE/PB/市值 等估值数据
-- 不提供新闻/公告数据
+- 不依赖本地 xtquant（可部署在任意平台）
+- 通过 HTTP API 访问 QMT 数据
+- 需要配置 QMT_SERVER_URL 指向 QMT Server
+
+配置示例：
+```python
+QMT_SERVER_URL = "http://192.168.1.100:8080"
+QMT_SERVER_TIMEOUT = 30
+QMT_SERVER_ENABLED = True
+```
 """
-import sys
-from typing import Optional, Dict, List
 import logging
-from datetime import datetime, timedelta
+from typing import Optional, Dict, List, Any
 import pandas as pd
+import requests
+from datetime import datetime, timedelta
 
 from .base import DataSourceAdapter
+from tradingagents.config.providers_config import get_provider_config
 
 logger = logging.getLogger(__name__)
 
-# QMT Provider 单例（延迟加载）
-_qmt_provider = None
-
-
-def _get_qmt_provider():
-    """获取 QMT Provider 单例"""
-    global _qmt_provider
-    if _qmt_provider is None:
-        try:
-            from tradingagents.dataflows.providers.china.qmt import get_qmt_provider
-            _qmt_provider = get_qmt_provider()
-        except ImportError:
-            logger.warning("⚠️ QMT Provider 导入失败")
-            _qmt_provider = None
-    return _qmt_provider
-
 
 class QMTAdapter(DataSourceAdapter):
-    """QMT 数据源适配器"""
+    """QMT HTTP Client 适配器"""
+
+    name = "qmt"
+    _priority = 4
 
     def __init__(self):
         super().__init__()
-        self._provider = None
+        self._server_url: Optional[str] = None
+        self._timeout: int = 30
+        self._enabled: bool = False
+        self._session = requests.Session()
         self._initialized = False
         self._available = False
+
         self._initialize()
 
     def _initialize(self):
@@ -52,143 +48,131 @@ class QMTAdapter(DataSourceAdapter):
             return
 
         try:
-            # 检查配置是否启用
-            from tradingagents.config.providers_config import get_provider_config
+            # 从配置读取
             config = get_provider_config("qmt")
-            if not config.get("enabled", False):
-                logger.info("QMT 数据源未启用（QMT_ENABLED=False）")
-                self._available = False
+            self._server_url = config.get("server_url", "")
+            self._timeout = config.get("timeout", 30)
+            self._enabled = config.get("enabled", False)
+
+            if not self._enabled:
+                logger.info("QMT HTTP Client 未启用")
                 self._initialized = True
                 return
 
-            # 检查平台
-            if sys.platform != "win32":
-                logger.info("QMT 仅支持 Windows 平台")
-                self._available = False
+            if not self._server_url:
+                logger.warning("⚠️ QMT_SERVER_URL 未配置")
                 self._initialized = True
                 return
 
-            # 尝试获取 Provider
-            self._provider = _get_qmt_provider()
-            if self._provider is None:
-                logger.warning("⚠️ QMT Provider 不可用")
+            # 测试连接
+            if self._check_health():
+                self._available = True
+                logger.info(f"✅ QMT HTTP Client 初始化成功: {self._server_url}")
+            else:
                 self._available = False
-                self._initialized = True
-                return
-
-            # 尝试连接测试
-            try:
-                if self._provider.connect_sync():
-                    self._available = True
-                    logger.info("✅ QMT Adapter 初始化成功")
-                else:
-                    self._available = False
-                    logger.info("⚠️ QMT 终端未运行")
-            except Exception as e:
-                logger.warning(f"⚠️ QMT 连接测试失败: {e}")
-                self._available = False
+                logger.warning(f"⚠️ QMT Server 不可达: {self._server_url}")
 
         except Exception as e:
-            logger.warning(f"⚠️ QMT Adapter 初始化失败: {e}")
+            logger.warning(f"⚠️ QMT HTTP Client 初始化失败: {e}")
             self._available = False
 
         self._initialized = True
 
-    @property
-    def name(self) -> str:
-        return "qmt"
+    def _request(self, method: str, path: str, **kwargs) -> Optional[Dict]:
+        """发送 HTTP 请求到 QMT Server"""
+        if not self._server_url:
+            return None
+
+        url = f"{self._server_url}/api/v1{path}"
+        try:
+            response = self._session.request(
+                method=method,
+                url=url,
+                timeout=self._timeout,
+                **kwargs
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.debug(f"QMT Server request failed: {e}")
+            return None
+
+    def _check_health(self) -> bool:
+        """检查 QMT Server 健康状态"""
+        try:
+            result = self._request("GET", "/system/health")
+            if result and result.get("success"):
+                return result.get("data", {}).get("qmtConnected", False)
+            return False
+        except Exception:
+            return False
 
     def _get_default_priority(self) -> int:
-        """
-        默认优先级：4（最高）
-
-        QMT 可用时优先使用，因为：
-        - 本地直连交易所，数据质量最高
-        - 无 API 限流
-        - 实时行情响应快
-        """
-        return 4
+        """默认优先级：4（最高）"""
+        return self._priority
 
     def is_available(self) -> bool:
-        """
-        检查 QMT 是否可用
-
-        条件：
-        1. QMT_ENABLED 配置为 True
-        2. Windows 平台
-        3. xtquant 可导入
-        4. QMT 终端正在运行
-        """
+        """检查 QMT Server 是否可用"""
         if not self._initialized:
             self._initialize()
 
-        # 如果之前检测为不可用，尝试重新检测（QMT 可能后来启动了）
-        if not self._available and self._provider is not None:
-            try:
-                if self._provider.connect_sync():
-                    self._available = True
-                    logger.info("✅ QMT 终端已启动")
-            except Exception:
-                pass
+        if not self._enabled or not self._server_url:
+            return False
+
+        # 如果之前检测失败，尝试重新检测
+        if not self._available:
+            self._available = self._check_health()
+            if self._available:
+                logger.info("✅ QMT Server 已恢复连接")
 
         return self._available
 
     def get_stock_list(self) -> Optional[pd.DataFrame]:
-        """
-        获取股票列表
-
-        QMT 通过板块遍历获取股票列表：
-        1. 先 download_sector_data 同步板块数据
-        2. 遍历 get_sector_list 获取板块
-        3. 对每个板块调用 get_stock_list_in_sector
-        4. 去重合并
-        """
+        """获取股票列表"""
         if not self.is_available():
             return None
 
         try:
-            import asyncio
-
-            # 同步包装异步调用
-            stocks = self._provider._get_stock_list_sync()
-
-            if stocks:
-                df = pd.DataFrame(stocks)
-                logger.info(f"✅ QMT 获取到 {len(df)} 只股票")
-                return df
-
+            result = self._request("GET", "/market/stock-list?sync=false")
+            if result and result.get("success"):
+                stocks = result.get("data", {}).get("stocks", [])
+                if stocks:
+                    df = pd.DataFrame(stocks)
+                    logger.info(f"✅ QMT 获取到 {len(df)} 只股票")
+                    return df
             return None
         except Exception as e:
             logger.error(f"❌ QMT 获取股票列表失败: {e}")
             return None
 
     def get_daily_basic(self, trade_date: str) -> Optional[pd.DataFrame]:
-        """
-        QMT 不提供 PE/PB/市值 等估值数据
-
-        Returns:
-            None - QMT 无此数据，DataSourceManager 会自动回退到其他数据源
-        """
+        """QMT 不提供 PE/PB/市值 数据"""
         logger.info("QMT 不提供 daily_basic（PE/PB/市值）数据")
         return None
 
     def get_realtime_quotes(self) -> Optional[Dict[str, Dict[str, Optional[float]]]]:
-        """
-        获取全市场实时行情
-
-        QMT 的实时行情质量最高，直连交易所
-        """
+        """获取全市场实时行情"""
         if not self.is_available():
             return None
 
         try:
-            # 使用 Provider 的批量获取方法
-            quotes = self._provider.get_realtime_quotes_batch_sync()
-
-            if quotes:
-                logger.info(f"✅ QMT 获取到 {len(quotes)} 只股票的实时行情")
-                return quotes
-
+            result = self._request("GET", "/market/quote?codes=all")
+            if result and result.get("success"):
+                quotes = result.get("data", {}).get("quotes", [])
+                if quotes:
+                    # 转换为标准格式
+                    result_dict = {}
+                    for q in quotes:
+                        code = q.get("code")
+                        if code:
+                            result_dict[code] = {
+                                "close": q.get("close"),
+                                "change_pct": q.get("changePct"),
+                                "volume": q.get("volume"),
+                                "amount": q.get("amount")
+                            }
+                    logger.info(f"✅ QMT 获取到 {len(result_dict)} 只股票的实时行情")
+                    return result_dict
             return None
         except Exception as e:
             logger.error(f"❌ QMT 获取实时行情失败: {e}")
@@ -201,17 +185,7 @@ class QMTAdapter(DataSourceAdapter):
         limit: int = 120,
         adj: Optional[str] = None
     ) -> Optional[List[Dict]]:
-        """
-        获取 K 线数据
-
-        QMT 支持多周期：1m, 5m, 15m, 30m, 1h, 1d, 1w, 1mon
-
-        Args:
-            code: 6位股票代码
-            period: 周期
-            limit: 返回数量
-            adj: 复权方式（QMT 不支持复权参数）
-        """
+        """获取 K 线数据"""
         if not self.is_available():
             return None
 
@@ -223,48 +197,26 @@ class QMTAdapter(DataSourceAdapter):
                 "month": "1mon", "1mon": "1mon",
                 "5m": "5m", "15m": "15m", "30m": "30m", "60m": "1h", "1h": "1h",
             }
-            qmt_period = period_map.get(period, period)
+            qmt_period = period_map.get(period, "1d")
 
-            # 格式化代码
-            qmt_code = self._provider._normalize_to_qmt_code(code)
-
-            # 先下载历史数据（确保缓存）
-            try:
-                self._provider.xtdata.download_history_data(
-                    qmt_code, period=qmt_period, start_time="", end_time=""
-                )
-            except Exception:
-                pass
-
-            # 获取 K 线数据
-            kline = self._provider.xtdata.get_market_data_ex(
-                field_list=["open", "high", "low", "close", "volume", "amount"],
-                stock_list=[qmt_code],
-                period=qmt_period,
-                count=limit
-            )
-
-            if kline and qmt_code in kline:
-                data = kline[qmt_code]
-                if data and len(data.get("close", [])) > 0:
+            result = self._request("GET", f"/market/kline/{code}?period={qmt_period}&count={limit}")
+            if result and result.get("success"):
+                klines = result.get("data", {}).get("kline", [])
+                if klines:
+                    # 转换字段名
                     items = []
-                    index_vals = list(data.index) if hasattr(data, "index") else []
-
-                    for i in range(len(data["close"])):
-                        item = {
-                            "time": str(index_vals[i] if i < len(index_vals) else ""),
-                            "open": self._provider._arr_at(data["open"], i),
-                            "high": self._provider._arr_at(data["high"], i),
-                            "low": self._provider._arr_at(data["low"], i),
-                            "close": self._provider._arr_at(data["close"], i),
-                            "volume": self._provider._arr_at(data["volume"], i),
-                            "amount": self._provider._arr_at(data["amount"], i),
-                        }
-                        items.append(item)
-
+                    for k in klines:
+                        items.append({
+                            "time": k.get("date", ""),
+                            "open": k.get("open"),
+                            "high": k.get("high"),
+                            "low": k.get("low"),
+                            "close": k.get("close"),
+                            "volume": k.get("volume"),
+                            "amount": k.get("amount"),
+                        })
                     logger.info(f"✅ QMT 获取 {code} {period} K线 {len(items)} 条")
                     return items
-
             return None
         except Exception as e:
             logger.error(f"❌ QMT 获取 K 线失败 {code}: {e}")
@@ -277,32 +229,24 @@ class QMTAdapter(DataSourceAdapter):
         limit: int = 50,
         include_announcements: bool = True
     ) -> Optional[List[Dict]]:
-        """
-        QMT 不提供新闻/公告数据
-
-        Returns:
-            None - QMT 无此数据，DataSourceManager 会自动回退
-        """
+        """QMT 不提供新闻/公告数据"""
         logger.info("QMT 不提供新闻/公告数据")
         return None
 
     def find_latest_trade_date(self) -> Optional[str]:
-        """
-        查找最新交易日期
-
-        通过获取上证指数的日K数据来确定最新交易日
-        """
+        """查找最新交易日期"""
         if not self.is_available():
-            # 回退到昨天
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
             return yesterday
 
         try:
-            trade_date = self._provider.find_latest_trade_date_sync()
-            if trade_date:
+            result = self._request("GET", "/market/quote/000001")
+            if result and result.get("success"):
+                data = result.get("data", {})
+                # 获取数据中的日期
+                trade_date = datetime.now().strftime("%Y%m%d")
                 return trade_date
 
-            # 回退到昨天
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
             return yesterday
         except Exception as e:
@@ -311,45 +255,157 @@ class QMTAdapter(DataSourceAdapter):
             return yesterday
 
     def get_full_tick(self, code: str) -> Optional[Dict]:
-        """
-        获取五档盘口数据（QMT 独有功能）
-
-        Args:
-            code: 6位股票代码
-
-        Returns:
-            包含 bidPrice[5], askPrice[5], bidVol[5], askVol[5] 的字典
-        """
+        """获取五档盘口数据"""
         if not self.is_available():
             return None
 
         try:
-            import asyncio
-            tick = self._provider._get_full_tick_sync(code)
-            if tick:
-                logger.info(f"✅ QMT 获取 {code} 五档盘口")
-                return tick
+            result = self._request("GET", f"/market/tick/{code}")
+            if result and result.get("success"):
+                data = result.get("data", {})
+                if data:
+                    logger.info(f"✅ QMT 获取 {code} 五档盘口")
+                    return data
             return None
         except Exception as e:
             logger.error(f"❌ QMT 获取盘口失败 {code}: {e}")
             return None
 
     def get_financial_data(self, code: str, limit: int = 4) -> Optional[Dict]:
-        """
-        获取财务数据
-
-        QMT 提供5张财务表：Income, Balance, CashFlow, Capital, PershareIndex
-        """
+        """获取财务数据"""
         if not self.is_available():
             return None
 
         try:
-            import asyncio
-            fin = self._provider._get_financial_data_sync(code, limit)
-            if fin:
-                logger.info(f"✅ QMT 获取 {code} 财务数据")
-                return fin
+            result = self._request("GET", f"/market/finance/{code}?limit={limit}")
+            if result and result.get("success"):
+                data = result.get("data", {})
+                if data:
+                    logger.info(f"✅ QMT 获取 {code} 财务数据")
+                    return data
             return None
         except Exception as e:
             logger.error(f"❌ QMT 获取财务数据失败 {code}: {e}")
+            return None
+
+    # ============== Trading Methods (for TradingAgents-CN internal use) ==============
+
+    def get_asset(self) -> Optional[Dict]:
+        """获取账户资产"""
+        if not self.is_available():
+            return None
+
+        try:
+            result = self._request("GET", "/account/asset")
+            if result and result.get("success"):
+                return result.get("data")
+            return None
+        except Exception as e:
+            logger.error(f"❌ QMT 获取账户资产失败: {e}")
+            return None
+
+    def get_positions(self, code: Optional[str] = None) -> List[Dict]:
+        """获取持仓"""
+        if not self.is_available():
+            return []
+
+        try:
+            path = f"/account/positions?code={code}" if code else "/account/positions"
+            result = self._request("GET", path)
+            if result and result.get("success"):
+                return result.get("data", {}).get("positions", [])
+            return []
+        except Exception as e:
+            logger.error(f"❌ QMT 获取持仓失败: {e}")
+            return []
+
+    def get_orders(self, cancelable_only: bool = False) -> List[Dict]:
+        """获取委托"""
+        if not self.is_available():
+            return []
+
+        try:
+            path = f"/account/orders?cancelable_only={cancelable_only}"
+            result = self._request("GET", path)
+            if result and result.get("success"):
+                return result.get("data", {}).get("orders", [])
+            return []
+        except Exception as e:
+            logger.error(f"❌ QMT 获取委托失败: {e}")
+            return []
+
+    def get_trades(self) -> List[Dict]:
+        """获取成交"""
+        if not self.is_available():
+            return []
+
+        try:
+            result = self._request("GET", "/account/trades")
+            if result and result.get("success"):
+                return result.get("data", {}).get("trades", [])
+            return []
+        except Exception as e:
+            logger.error(f"❌ QMT 获取成交失败: {e}")
+            return []
+
+    def buy(self, code: str, volume: int, price_type: str = "FIX",
+            price: Optional[float] = None) -> Optional[Dict]:
+        """买入下单"""
+        if not self.is_available():
+            return None
+
+        try:
+            payload = {
+                "code": code,
+                "volume": volume,
+                "priceType": price_type,
+                "price": price,
+                "confirm": True
+            }
+            result = self._request("POST", "/trade/buy", json=payload)
+            if result and result.get("success"):
+                return result.get("data")
+            return None
+        except Exception as e:
+            logger.error(f"❌ QMT 买入下单失败: {e}")
+            return None
+
+    def sell(self, code: str, volume: int, price_type: str = "FIX",
+             price: Optional[float] = None) -> Optional[Dict]:
+        """卖出下单"""
+        if not self.is_available():
+            return None
+
+        try:
+            payload = {
+                "code": code,
+                "volume": volume,
+                "priceType": price_type,
+                "price": price,
+                "confirm": True
+            }
+            result = self._request("POST", "/trade/sell", json=payload)
+            if result and result.get("success"):
+                return result.get("data")
+            return None
+        except Exception as e:
+            logger.error(f"❌ QMT 卖出下单失败: {e}")
+            return None
+
+    def cancel(self, order_id: int) -> Optional[Dict]:
+        """撤单"""
+        if not self.is_available():
+            return None
+
+        try:
+            payload = {
+                "orderId": order_id,
+                "confirm": True
+            }
+            result = self._request("POST", "/trade/cancel", json=payload)
+            if result and result.get("success"):
+                return result.get("data")
+            return None
+        except Exception as e:
+            logger.error(f"❌ QMT 撤单失败: {e}")
             return None
