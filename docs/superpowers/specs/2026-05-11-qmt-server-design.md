@@ -193,7 +193,11 @@ http://{host}:{port}/api/v1/{module}/{action}
 | `count` | integer | 否 | `100` | 返回K线数量（最多 1000） |
 | `start` | string | 否 | - | 开始日期 YYYYMMDD |
 | `end` | string | 否 | - | 结束日期 YYYYMMDD |
-| `download` | boolean | 否 | `true` | 是否先下载历史数据（确保缓存） |
+| `download` | boolean | 否 | `true` | 是否先下载历史数据（确保缓存，首次可能较慢） |
+
+**注意**: 
+- 首次获取某股票某周期的数据时，可能需要下载历史数据，耗时较长（建议客户端设置 30 秒以上超时）
+- 后续调用会使用缓存，响应更快
 
 **响应示例**:
 
@@ -216,15 +220,6 @@ http://{host}:{port}/api/v1/{module}/{action}
         "close": 10.55,
         "volume": 125000000,
         "amount": 1318750000.00
-      },
-      {
-        "date": "20260502",
-        "open": 10.55,
-        "high": 10.70,
-        "low": 10.50,
-        "close": 10.62,
-        "volume": 98765000,
-        "amount": 1045230000.00
       }
     ]
   },
@@ -333,8 +328,13 @@ http://{host}:{port}/api/v1/{module}/{action}
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `sync` | boolean | 否 | `true` | 是否先同步板块数据（首次较慢） |
+| `sync` | boolean | 否 | `true` | 是否先同步板块数据（首次调用可能较慢，约30-60秒） |
 | `market` | string | 否 | `all` | 市场筛选：`sh`, `sz`, `bj`, `all` |
+
+**注意**: 
+- 首次调用 `sync=true` 时会下载板块数据，耗时约 30-60 秒
+- 响应中 `stocks` 字段最多返回前 100 只股票，但 `total` 显示实际总数
+- 如需完整列表，建议先调用一次 `sync=true`，后续使用 `sync=false`
 
 **响应示例**:
 
@@ -351,13 +351,6 @@ http://{host}:{port}/api/v1/{module}/{action}
         "name": "平安银行",
         "market": "SZ",
         "marketName": "深圳证券交易所"
-      },
-      {
-        "code": "600519",
-        "fullCode": "600519.SH",
-        "name": "贵州茅台",
-        "market": "SH",
-        "marketName": "上海证券交易所"
       }
     ],
     "synced": true,
@@ -448,6 +441,8 @@ http://{host}:{port}/api/v1/{module}/{action}
 
 **端点**: `GET /api/v1/market/finance/{code}`
 
+> **注意**: 此接口当前为占位符实现，返回空数据。完整实现需要调用 `xtdata.download_financial_data()` 和 `xtdata.get_financial_data()`。
+
 **路径参数**:
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -471,25 +466,10 @@ http://{host}:{port}/api/v1/{module}/{action}
     "code": "000001",
     "fullCode": "000001.SZ",
     "name": "平安银行",
-    "tables": {
-      "Income": [
-        {
-          "reportDate": "2025Q4",
-          "revenue": 125000000000,
-          "netProfit": 45000000000
-        }
-      ],
-      "Balance": [
-        {
-          "reportDate": "2025Q4",
-          "totalAssets": 5500000000000,
-          "totalLiabilities": 5000000000000,
-          "totalEquity": 500000000000
-        }
-      ]
-    }
+    "tables": {},
+    "note": "Not yet implemented - placeholder"
   },
-  "message": "获取 000001 财务数据"
+  "message": "财务数据接口（占位符）"
 }
 ```
 
@@ -545,6 +525,8 @@ http://{host}:{port}/api/v1/{module}/{action}
 
 **端点**: `GET /api/v1/market/trading-dates`
 
+> **注意**: 此接口当前为占位符实现，返回空数据。完整实现需要调用 `xtdata.get_trading_dates()`。
+
 **查询参数**:
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -561,16 +543,11 @@ http://{host}:{port}/api/v1/{module}/{action}
   "data": {
     "start": "20260101",
     "end": "20260511",
-    "tradingDays": [
-      "20260102",
-      "20260103",
-      "20260104",
-      "20260105",
-      "..."
-    ],
-    "count": 85
+    "tradingDays": [],
+    "count": 0,
+    "note": "Not yet implemented - placeholder"
   },
-  "message": "获取交易日历"
+  "message": "交易日历接口（占位符）"
 }
 ```
 
@@ -861,16 +838,16 @@ http://{host}:{port}/api/v1/{module}/{action}
 
 **端点**: `POST /api/v1/trade/buy`
 
-**请求体**:
+**请求体** (snake_case，FastAPI 自动处理 camelCase 别名):
 
 ```json
 {
   "code": "000001",
   "volume": 1000,
-  "priceType": "FIX",
+  "price_type": "FIX",
   "price": 10.55,
-  "strategyName": "",
-  "orderRemark": "",
+  "strategy_name": "",
+  "order_remark": "",
   "confirm": false
 }
 ```
@@ -879,10 +856,10 @@ http://{host}:{port}/api/v1/{module}/{action}
 |------|------|------|------|
 | `code` | string | 是 | 股票代码 |
 | `volume` | integer | 是 | 买入数量（必须是100的整数倍） |
-| `priceType` | string | 是 | 报价类型，见下表 |
-| `price` | float | 条件必填 | 指定价格（priceType=FIX时必填） |
-| `strategyName` | string | 否 | 策略名称（日志用） |
-| `orderRemark` | string | 否 | 委托备注 |
+| `price_type` | string | 是 | 报价类型（也可传 `priceType`） |
+| `price` | float | 条件必填 | 指定价格（price_type=FIX时必填） |
+| `strategy_name` | string | 否 | 策略名称（也可传 `strategyName`） |
+| `order_remark` | string | 否 | 委托备注（也可传 `orderRemark`） |
 | `confirm` | boolean | 否 | `true` = 真正下单，`false` = 仅预演 |
 
 **报价类型**:
@@ -953,7 +930,7 @@ http://{host}:{port}/api/v1/{module}/{action}
 {
   "code": "000001",
   "volume": 500,
-  "priceType": "LATEST",
+  "price_type": "LATEST",
   "confirm": false
 }
 ```
@@ -970,14 +947,14 @@ http://{host}:{port}/api/v1/{module}/{action}
 
 ```json
 {
-  "orderId": 123456789,
+  "order_id": 123456789,
   "confirm": false
 }
 ```
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `orderId` | integer | 是 | 委托编号（buy/sell 返回的 orderId） |
+| `order_id` | integer | 是 | 委托编号（buy/sell 返回的 order_id，也可传 `orderId`） |
 | `confirm` | boolean | 否 | `true` = 真正撤单 |
 
 **响应示例**:
@@ -1229,7 +1206,81 @@ uvicorn main:app --host 0.0.0.0 --port 8080
 
 ---
 
-## 12. 文件结构
+## 13. 接口性能与超时建议
+
+### 13.1 超时配置建议
+
+| 接口 | 建议超时 | 说明 |
+|------|---------|------|
+| `/system/health` | 5 秒 | 轻量级检查 |
+| `/system/status` | 5 秒 | 轻量级查询 |
+| `/market/quote/{code}` | 10 秒 | 单只行情 |
+| `/market/quote` | 15 秒 | 批量行情 |
+| `/market/kline/{code}` | 60 秒 | 首次调用需下载历史数据 |
+| `/market/tick/{code}` | 10 秒 | 五档盘口 |
+| `/market/stock-list` | 120 秒 | 首次调用需下载板块数据 |
+| `/market/blocks` | 30 秒 | 板块列表 |
+| `/account/asset` | 10 秒 | 账户资产 |
+| `/account/positions` | 10 秒 | 持仓查询 |
+| `/account/orders` | 10 秒 | 委托查询 |
+| `/account/trades` | 10 秒 | 成交查询 |
+| `/trade/buy` | 15 秒 | 买入下单 |
+| `/trade/sell` | 15 秒 | 卖出下单 |
+| `/trade/cancel` | 15 秒 | 撤单 |
+
+### 13.2 性能优化建议
+
+1. **股票列表缓存**: 首次调用 `/market/stock-list?sync=true` 后，后续使用 `sync=false`
+2. **K线数据缓存**: 首次获取某股票某周期数据较慢，建议预加载常用数据
+3. **批量调用**: 尽量使用批量接口（如 `/market/quote?codes=xxx,yyy`）代替多次单只查询
+4. **板块数据**: 板块数据不经常变动，可定期同步（如每天一次）
+
+### 13.3 已知限制
+
+1. **财务数据**: 接口已定义但未完整实现（placeholder）
+2. **交易日历**: 接口已定义但未完整实现（placeholder）
+3. **股票列表**: 返回数量限制为 100 只，如需完整列表需自行分页处理
+
+---
+
+## 14. 客户端调用示例
+
+### Python
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8080/api/v1"
+
+# 健康检查
+resp = requests.get(f"{BASE_URL}/system/health", timeout=5)
+print(resp.json())
+
+# 获取单只股票行情
+resp = requests.get(f"{BASE_URL}/market/quote/000001", timeout=10)
+print(resp.json())
+
+# 获取K线（注意超时设置较长）
+resp = requests.get(
+    f"{BASE_URL}/market/kline/000001?period=1d&count=100",
+    timeout=60
+)
+print(resp.json())
+
+# 买入预演
+resp = requests.post(
+    f"{BASE_URL}/trade/buy",
+    json={
+        "code": "000001",
+        "volume": 100,
+        "price_type": "FIX",
+        "price": 10.5,
+        "confirm": False
+    },
+    timeout=15
+)
+print(resp.json())
+```
 
 ```
 TradingAgents-CN/
