@@ -11,6 +11,7 @@
 - [配置说明](#配置说明)
 - [运行方式](#运行方式)
 - [接口文档](#接口文档)
+- [相关文档](#相关文档)
 - [常见问题](#常见问题)
 
 ---
@@ -172,7 +173,15 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8080 --log-level info >> qmt_se
 
 ## 接口文档
 
-启动后访问自动生成的文档：
+### 文档位置
+
+| 文档 | 路径 | 说明 |
+|------|------|------|
+| **详细设计文档** | `../docs/superpowers/specs/2026-05-11-qmt-server-design.md` | 完整接口定义、请求/响应格式、错误码 |
+| **实现计划** | `../docs/superpowers/plans/2026-05-11-qmt-server.md` | 开发任务和实现步骤 |
+| **本文档** | `qmt_server/README.md` | 部署和运行指南 |
+
+### 在线文档（启动后访问）
 
 | 文档类型 | 地址 |
 |----------|------|
@@ -219,6 +228,35 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8080 --log-level info >> qmt_se
 | POST | `/cancel` | 撤单 |
 
 **重要**：交易接口默认预演模式，需加 `confirm: true` 才真正下单！
+
+---
+
+## 相关文档
+
+### 设计文档
+
+| 文档 | 路径 | 内容 |
+|------|------|------|
+| **API 设计规范** | `docs/superpowers/specs/2026-05-11-qmt-server-design.md` | 完整接口定义、请求/响应格式、错误码说明、性能建议 |
+| **实现计划** | `docs/superpowers/plans/2026-05-11-qmt-server.md` | 开发任务分解、实现步骤、文件清单 |
+
+### 项目结构
+
+```
+TradingAgents-CN/
+├── qmt_server/                    ← 本目录（Server 实现）
+│   ├── README.md                  ← 本文档（部署运行指南）
+│   ├── main.py                    ← FastAPI 入口
+│   ├── routers/                   ← API 路由
+│   ├── services/                  ← 业务逻辑
+│   └── ...
+│
+└── docs/superpowers/              ← 设计文档
+    ├── specs/                     ← 规范文档
+    │   └── 2026-05-11-qmt-server-design.md
+    └── plans/                     ← 实现计划
+        └── 2026-05-11-qmt-server.md
+```
 
 ---
 
