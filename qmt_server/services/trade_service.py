@@ -4,7 +4,10 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from qmt_server.config import get_config, Config
+try:
+    from qmt_server.config import get_config, Config
+except ImportError:
+    from config import get_config, Config
 
 logger = logging.getLogger(__name__)
 

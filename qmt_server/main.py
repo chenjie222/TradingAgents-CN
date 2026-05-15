@@ -7,11 +7,21 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from qmt_server.config import get_config, reload_config
-from qmt_server.routers import market_router, account_router, trade_router, system_router
-from qmt_server.middleware.rate_limit import RateLimitMiddleware
-from qmt_server.services.xtquant_service import get_xtquant_service
-from qmt_server.services.trade_service import get_trade_service
+# Support both standalone and package mode
+try:
+    # Try package mode first (when running from project root)
+    from qmt_server.config import get_config, reload_config
+    from qmt_server.routers import market_router, account_router, trade_router, system_router
+    from qmt_server.middleware.rate_limit import RateLimitMiddleware
+    from qmt_server.services.xtquant_service import get_xtquant_service
+    from qmt_server.services.trade_service import get_trade_service
+except ImportError:
+    # Fall back to standalone mode (when running from qmt_server directory)
+    from config import get_config, reload_config
+    from routers import market_router, account_router, trade_router, system_router
+    from middleware.rate_limit import RateLimitMiddleware
+    from services.xtquant_service import get_xtquant_service
+    from services.trade_service import get_trade_service
 
 # Configure logging
 logging.basicConfig(

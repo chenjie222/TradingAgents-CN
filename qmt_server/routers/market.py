@@ -4,10 +4,16 @@ import asyncio
 from typing import Optional, List
 from fastapi import APIRouter, Query, HTTPException
 
-from qmt_server.models.schemas import (
-    APIResponse, SubscribeRequest
-)
-from qmt_server.services.xtquant_service import get_xtquant_service
+try:
+    from qmt_server.models.schemas import (
+        APIResponse, SubscribeRequest
+    )
+    from qmt_server.services.xtquant_service import get_xtquant_service
+except ImportError:
+    from models.schemas import (
+        APIResponse, SubscribeRequest
+    )
+    from services.xtquant_service import get_xtquant_service
 
 logger = logging.getLogger(__name__)
 

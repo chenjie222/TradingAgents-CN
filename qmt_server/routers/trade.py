@@ -2,11 +2,18 @@
 import logging
 from fastapi import APIRouter, HTTPException
 
-from qmt_server.models.schemas import (
-    APIResponse, BuyRequest, SellRequest, CancelRequest
-)
-from qmt_server.services.trade_service import get_trade_service
-from qmt_server.services.xtquant_service import get_xtquant_service
+try:
+    from qmt_server.models.schemas import (
+        APIResponse, BuyRequest, SellRequest, CancelRequest
+    )
+    from qmt_server.services.trade_service import get_trade_service
+    from qmt_server.services.xtquant_service import get_xtquant_service
+except ImportError:
+    from models.schemas import (
+        APIResponse, BuyRequest, SellRequest, CancelRequest
+    )
+    from services.trade_service import get_trade_service
+    from services.xtquant_service import get_xtquant_service
 
 logger = logging.getLogger(__name__)
 
