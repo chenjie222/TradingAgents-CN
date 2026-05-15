@@ -5,7 +5,10 @@ from typing import Dict
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from qmt_server.config import get_config
+try:
+    from qmt_server.config import get_config
+except ImportError:
+    from config import get_config
 
 logger = logging.getLogger(__name__)
 

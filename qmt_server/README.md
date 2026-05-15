@@ -57,32 +57,24 @@ $env:QMT_SERVER_PORT="8080"
 # 进入项目根目录
 cd D:\work\code\TradingAgents-CN
 
-# 方式 1：使用 uvicorn（推荐）
+# 使用 uvicorn 启动
 python -m uvicorn qmt_server.main:app --host 0.0.0.0 --port 8080 --log-level info
-
-# 方式 2：直接运行（调试用）
-python -m qmt_server.main
-
-# 方式 3：生产模式（多 worker）
-python -m uvicorn qmt_server.main:app --host 0.0.0.0 --port 8080 --workers 2
 ```
 
-#### 方式 B：在 qmt_server 目录内启动
+#### 方式 B：在 qmt_server 目录内启动（独立模式）
 
 ```bash
 # 进入 qmt_server 目录
 cd D:\work\code\TradingAgents-CN\qmt_server
 
-# 设置 PYTHONPATH 为父目录，然后启动
-$env:PYTHONPATH="D:\work\code\TradingAgents-CN"
+# 直接启动（不需要 PYTHONPATH）
 python -m uvicorn main:app --host 0.0.0.0 --port 8080 --log-level info
 
-# Linux/Mac
-export PYTHONPATH=/path/to/TradingAgents-CN
-python -m uvicorn main:app --host 0.0.0.0 --port 8080
+# 或者直接运行
+python main.py
 ```
 
-> **方式 B 注意**：必须设置 `PYTHONPATH` 环境变量指向项目根目录，否则会出现 `No module named 'qmt_server'` 错误！
+> **说明**：代码已修改为同时支持包模式和独立模式，通过 try/except 自动检测导入方式。
 
 ### 4. 验证启动
 

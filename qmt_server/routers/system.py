@@ -7,12 +7,20 @@ from datetime import datetime
 from typing import List, Dict
 from fastapi import APIRouter, HTTPException
 
-from qmt_server.models.schemas import (
-    APIResponse, DoctorCheckItem
-)
-from qmt_server.services.xtquant_service import get_xtquant_service, _xtquant_available
-from qmt_server.services.trade_service import get_trade_service, _xtt_available
-from qmt_server.config import get_config
+try:
+    from qmt_server.models.schemas import (
+        APIResponse, DoctorCheckItem
+    )
+    from qmt_server.services.xtquant_service import get_xtquant_service, _xtquant_available
+    from qmt_server.services.trade_service import get_trade_service, _xtt_available
+    from qmt_server.config import get_config
+except ImportError:
+    from models.schemas import (
+        APIResponse, DoctorCheckItem
+    )
+    from services.xtquant_service import get_xtquant_service, _xtquant_available
+    from services.trade_service import get_trade_service, _xtt_available
+    from config import get_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/system", tags=["System"])

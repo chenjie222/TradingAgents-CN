@@ -3,8 +3,12 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 
-from qmt_server.models.schemas import APIResponse
-from qmt_server.services.trade_service import get_trade_service
+try:
+    from qmt_server.models.schemas import APIResponse
+    from qmt_server.services.trade_service import get_trade_service
+except ImportError:
+    from models.schemas import APIResponse
+    from services.trade_service import get_trade_service
 
 logger = logging.getLogger(__name__)
 
