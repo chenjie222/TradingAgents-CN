@@ -11,14 +11,14 @@ try:
     from qmt_server.models.schemas import (
         APIResponse, DoctorCheckItem
     )
-    from qmt_server.services.xtquant_service import get_xtquant_service, _xtquant_available
+    from qmt_server.services.xtquant_service import get_xtquant_service, is_xtquant_available
     from qmt_server.services.trade_service import get_trade_service, _xtt_available
     from qmt_server.config import get_config
 except ImportError:
     from models.schemas import (
         APIResponse, DoctorCheckItem
     )
-    from services.xtquant_service import get_xtquant_service, _xtquant_available
+    from services.xtquant_service import get_xtquant_service, is_xtquant_available
     from services.trade_service import get_trade_service, _xtt_available
     from config import get_config
 
@@ -54,6 +54,7 @@ async def health_check():
         config = get_config()
 
         qmt_connected = xt_service.is_ready()
+        xtquant_available = is_xtquant_available()
         account_configured = bool(config.account_id and config.userdata_path)
 
         status = "healthy" if qmt_connected else "degraded"
@@ -63,7 +64,7 @@ async def health_check():
             data={
                 "status": status,
                 "qmtConnected": qmt_connected,
-                "xtquantAvailable": _xtquant_available,
+                "xtquantAvailable": xtquant_available,
                 "accountConfigured": account_configured
             },
             message="System healthy" if status == "healthy" else "System degraded - QMT not connected"
@@ -105,7 +106,7 @@ async def doctor():
     })
 
     # 4. xtquant import check
-    import_ok = _xtquant_available
+    import_ok = is_xtquant_available()
     checks.append({
         "name": "xtquant导入",
         "ok": import_ok,

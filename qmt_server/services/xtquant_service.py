@@ -44,6 +44,15 @@ def _ensure_xtdata():
         raise
 
 
+def is_xtquant_available() -> bool:
+    """Check if xtquant is available (triggers import if not already)"""
+    try:
+        _ensure_xtdata()
+    except Exception:
+        pass
+    return _xtquant_available
+
+
 class XTQuantService:
     """Service wrapper for xtquant market data"""
 
@@ -121,10 +130,21 @@ class XTQuantService:
         seen_codes = set()
         stocks = []
 
-        for sector in sectors:
+        # Filter sectors to only include stock-related ones
+        stock_sectors = ['上证A股', '上证B股', '深证A股', '深证B股', '京市A股', '创业板', '科创板']
+        filtered_sectors = [s for s in sectors if s in stock_sectors or any(k in s for k in ['A股', 'B股', '创业板', '科创板'])]
+
+        for sector in filtered_sectors:
             try:
                 sector_stocks = xtdata.get_stock_list_in_sector(sector)
                 for full_code in sector_stocks:
+                    # Filter to only include SH, SZ, BJ market stocks
+                    if '.' not in full_code:
+                        continue
+                    exchange = full_code.split('.')[1]
+                    if exchange not in ['SH', 'SZ', 'BJ']:
+                        continue
+
                     code = self._code_from_full(full_code)
                     if code not in seen_codes:
                         seen_codes.add(code)
@@ -132,7 +152,7 @@ class XTQuantService:
                             'code': code,
                             'fullCode': full_code,
                             'name': '',  # Name lookup requires additional API call
-                            'market': full_code.split('.')[1],
+                            'market': exchange,
                             'marketName': self._get_market_name(full_code)
                         })
             except Exception as e:
@@ -294,26 +314,55 @@ class XTQuantService:
                 if isinstance(data, dict):
                     if full_code not in data:
                         continue
-                    row_data = data[full_code]
-                    if not isinstance(row_data, dict):
+                    df = data[full_code]
+                    # DataFrame case - xtdata returns DataFrame
+                    if hasattr(df, 'iloc') and len(df) > 0:
+                        row = df.iloc[0]
+                        close = float(row.get('close', 0) if hasattr(row, 'get') else row['close'])
+                        pre_close = float(row.get('preClose', 0) if hasattr(row, 'get') else row['preClose'])
+                        open_price = float(row.get('open', 0) if hasattr(row, 'get') else row['open'])
+                        high = float(row.get('high', 0) if hasattr(row, 'get') else row['high'])
+                        low = float(row.get('low', 0) if hasattr(row, 'get') else row['low'])
+                        volume = int(row.get('volume', 0) if hasattr(row, 'get') else row['volume'])
+                        amount = float(row.get('amount', 0) if hasattr(row, 'get') else row['amount'])
+                    elif isinstance(df, dict):
+                        close = float(df.get('close', 0))
+                        pre_close = float(df.get('preClose', 0))
+                        open_price = float(df.get('open', 0))
+                        high = float(df.get('high', 0))
+                        low = float(df.get('low', 0))
+                        volume = int(df.get('volume', 0))
+                        amount = float(df.get('amount', 0))
+                    else:
                         continue
-                    close = float(row_data.get('close', 0))
-                    pre_close = float(row_data.get('preClose', 0))
                 elif hasattr(data, 'index') and full_code in data.index:
                     row = data.loc[full_code]
                     close = float(row.get('close', 0))
                     pre_close = float(row.get('preClose', 0))
+                    open_price = float(row.get('open', 0))
+                    high = float(row.get('high', 0))
+                    low = float(row.get('low', 0))
+                    volume = int(row.get('volume', 0))
+                    amount = float(row.get('amount', 0))
                 else:
                     continue
 
                 change_pct = (close / pre_close - 1) * 100 if pre_close else 0
+                change = close - pre_close if pre_close else 0
 
                 results.append({
                     'code': code,
                     'fullCode': full_code,
                     'name': '',
+                    'open': open_price,
+                    'high': high,
+                    'low': low,
                     'close': close,
-                    'changePct': round(change_pct, 2)
+                    'preClose': pre_close,
+                    'change': round(change, 2),
+                    'changePct': round(change_pct, 2),
+                    'volume': volume,
+                    'amount': amount
                 })
 
             return results
@@ -406,14 +455,27 @@ class XTQuantService:
             if data is None:
                 return None
 
-            # Handle dict return type from xtdata
+            klines = []
+
+            # Handle dict return type from xtdata (Dict[str, DataFrame])
             if isinstance(data, dict):
                 if full_code not in data:
                     return None
-                # For dict, try to extract data directly
                 code_data = data[full_code]
-                klines = []
-                if isinstance(code_data, dict):
+
+                # DataFrame case - xtdata returns DataFrame
+                if hasattr(code_data, 'iterrows') and not code_data.empty:
+                    for idx, row in code_data.iterrows():
+                        klines.append({
+                            'date': str(idx).replace('-', '').replace(' ', '').replace(':', '')[:8],
+                            'open': float(row.get('open', 0) if hasattr(row, 'get') else row['open']),
+                            'high': float(row.get('high', 0) if hasattr(row, 'get') else row['high']),
+                            'low': float(row.get('low', 0) if hasattr(row, 'get') else row['low']),
+                            'close': float(row.get('close', 0) if hasattr(row, 'get') else row['close']),
+                            'volume': int(row.get('volume', 0) if hasattr(row, 'get') else row['volume']),
+                            'amount': float(row.get('amount', 0) if hasattr(row, 'get') else row['amount'])
+                        })
+                elif isinstance(code_data, dict):
                     # Single day data as dict
                     klines.append({
                         'date': datetime.now().strftime('%Y%m%d'),
@@ -424,48 +486,24 @@ class XTQuantService:
                         'volume': int(code_data.get('volume', 0)),
                         'amount': float(code_data.get('amount', 0))
                     })
-                return {
-                    'code': code,
-                    'fullCode': full_code,
-                    'name': '',
-                    'period': period,
-                    'count': len(klines),
-                    'kline': klines
-                }
+            elif hasattr(data, 'index'):
+                # DataFrame case
+                if full_code not in data.index:
+                    return None
 
-            if full_code not in data.index:
-                return None
+                df_data = data.xs(full_code) if hasattr(data, 'xs') else data
 
-            # Convert to kline format - handle xtdata's DataFrame structure
-            klines = []
-
-            # xtdata returns DataFrame with multi-index or single index
-            df_data = data.xs(full_code) if hasattr(data, 'xs') else data
-
-            if hasattr(df_data, 'iterrows'):
-                for idx, row in df_data.iterrows():
-                    klines.append({
-                        'date': str(idx) if not isinstance(idx, tuple) else str(idx[1]),
-                        'open': float(row.get('open', 0)),
-                        'high': float(row.get('high', 0)),
-                        'low': float(row.get('low', 0)),
-                        'close': float(row.get('close', 0)),
-                        'volume': int(row.get('volume', 0)),
-                        'amount': float(row.get('amount', 0))
-                    })
-            elif hasattr(df_data, 'index') and len(df_data) > 0:
-                # Single row case
-                for i, idx in enumerate(df_data.index):
-                    row = df_data.iloc[i] if hasattr(df_data, 'iloc') else df_data.loc[idx]
-                    klines.append({
-                        'date': str(idx) if not isinstance(idx, tuple) else str(idx[1]),
-                        'open': float(row.get('open', 0) if hasattr(row, 'get') else row[0]),
-                        'high': float(row.get('high', 0) if hasattr(row, 'get') else row[1]),
-                        'low': float(row.get('low', 0) if hasattr(row, 'get') else row[2]),
-                        'close': float(row.get('close', 0) if hasattr(row, 'get') else row[3]),
-                        'volume': int(row.get('volume', 0) if hasattr(row, 'get') else row[4]),
-                        'amount': float(row.get('amount', 0) if hasattr(row, 'get') else row[5])
-                    })
+                if hasattr(df_data, 'iterrows'):
+                    for idx, row in df_data.iterrows():
+                        klines.append({
+                            'date': str(idx) if not isinstance(idx, tuple) else str(idx[1]),
+                            'open': float(row.get('open', 0)),
+                            'high': float(row.get('high', 0)),
+                            'low': float(row.get('low', 0)),
+                            'close': float(row.get('close', 0)),
+                            'volume': int(row.get('volume', 0)),
+                            'amount': float(row.get('amount', 0))
+                        })
 
             return {
                 'code': code,
