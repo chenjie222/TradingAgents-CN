@@ -52,15 +52,20 @@ $env:QMT_SERVER_PORT="8080"
 ### 3. 启动服务
 
 ```bash
+# 进入项目根目录（不是 qmt_server 目录）
+cd D:\work\code\TradingAgents-CN
+
 # 方式 1：使用 uvicorn（推荐）
-python -m uvicorn main:app --host 0.0.0.0 --port 8080 --log-level info
+python -m uvicorn qmt_server.main:app --host 0.0.0.0 --port 8080 --log-level info
 
 # 方式 2：直接运行（调试用）
-python main.py
+python -m qmt_server.main
 
 # 方式 3：生产模式（多 worker）
-python -m uvicorn main:app --host 0.0.0.0 --port 8080 --workers 2
+python -m uvicorn qmt_server.main:app --host 0.0.0.0 --port 8080 --workers 2
 ```
+
+> **注意**：必须在项目根目录运行，不要在 `qmt_server` 目录内运行！
 
 ### 4. 验证启动
 
