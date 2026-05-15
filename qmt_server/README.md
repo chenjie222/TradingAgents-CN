@@ -51,8 +51,10 @@ $env:QMT_SERVER_PORT="8080"
 
 ### 3. 启动服务
 
+#### 方式 A：在项目根目录启动（推荐）
+
 ```bash
-# 进入项目根目录（不是 qmt_server 目录）
+# 进入项目根目录
 cd D:\work\code\TradingAgents-CN
 
 # 方式 1：使用 uvicorn（推荐）
@@ -65,7 +67,22 @@ python -m qmt_server.main
 python -m uvicorn qmt_server.main:app --host 0.0.0.0 --port 8080 --workers 2
 ```
 
-> **注意**：必须在项目根目录运行，不要在 `qmt_server` 目录内运行！
+#### 方式 B：在 qmt_server 目录内启动
+
+```bash
+# 进入 qmt_server 目录
+cd D:\work\code\TradingAgents-CN\qmt_server
+
+# 设置 PYTHONPATH 为父目录，然后启动
+$env:PYTHONPATH="D:\work\code\TradingAgents-CN"
+python -m uvicorn main:app --host 0.0.0.0 --port 8080 --log-level info
+
+# Linux/Mac
+export PYTHONPATH=/path/to/TradingAgents-CN
+python -m uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
+> **方式 B 注意**：必须设置 `PYTHONPATH` 环境变量指向项目根目录，否则会出现 `No module named 'qmt_server'` 错误！
 
 ### 4. 验证启动
 
